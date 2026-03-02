@@ -2,6 +2,12 @@
    Server Vault - Global Styles
    ============================================ */
 
+/* 隐藏 Obsidian 默认的代码块编辑/复制按钮，避免遮挡插件 UI */
+.block-language-server .edit-block-button,
+.block-language-server .copy-code-button {
+    display: none !important;
+}
+
 .sv-error {
     color: var(--text-error, #e03e3e);
     padding: 12px 16px;
