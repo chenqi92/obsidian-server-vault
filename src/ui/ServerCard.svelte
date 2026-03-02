@@ -6,7 +6,23 @@
 
     let passwordVisible = false;
 
+    /** 检测字段是否处于加密状态（未解密） */
+    function isEnc(val: string | undefined): boolean {
+        return (
+            typeof val === "string" &&
+            val.startsWith("ENC(") &&
+            val.endsWith(")")
+        );
+    }
+
     function copy(text: string, msg: string) {
+        if (isEnc(text)) {
+            new Notice(
+                "🔒 数据已加密，请先执行「Server Vault: 解锁」命令",
+                2500,
+            );
+            return;
+        }
         navigator.clipboard
             .writeText(text)
             .then(() => new Notice(`✅ ${msg}`, 1500))
@@ -14,6 +30,9 @@
     }
 
     $: sshCmd = `ssh -p ${data.port || 22} ${data.user}@${data.host}`;
+    $: pwEncrypted = isEnc(data.password);
+    $: pkEncrypted = isEnc(data.privateKey);
+    $: pubEncrypted = isEnc(data.publicKey);
     $: authLabel = data.privateKey
         ? "密钥"
         : data.publicKey
@@ -21,7 +40,11 @@
           : data.password
             ? "密码"
             : "—";
-    $: masked = passwordVisible ? data.password : "••••••";
+    $: masked = pwEncrypted
+        ? "🔒 已加密"
+        : passwordVisible
+          ? data.password
+          : "••••••";
 
     function getEnvLabel(env: string): string {
         return (
@@ -64,18 +87,26 @@
         <div class="sv-kv">
             <span class="sv-k">认证</span>
             <span class="sv-v sv-auth">
-                <span class="sv-auth-badge">{authLabel}</span>
+                <span
+                    class="sv-auth-badge"
+                    class:sv-locked={pwEncrypted || pkEncrypted || pubEncrypted}
+                    >{authLabel}</span
+                >
                 {#if data.password}
-                    <code class="sv-pw">{masked}</code>
-                    <!-- svelte-ignore a11y-click-events-have-key-events -->
-                    <!-- svelte-ignore a11y-no-static-element-interactions -->
-                    <span
-                        class="sv-eye"
-                        on:click|stopPropagation={() =>
-                            (passwordVisible = !passwordVisible)}
+                    <code class="sv-pw" class:sv-locked-text={pwEncrypted}
+                        >{masked}</code
                     >
-                        {passwordVisible ? "🙈" : "👁"}
-                    </span>
+                    {#if !pwEncrypted}
+                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                        <span
+                            class="sv-eye"
+                            on:click|stopPropagation={() =>
+                                (passwordVisible = !passwordVisible)}
+                        >
+                            {passwordVisible ? "🙈" : "👁"}
+                        </span>
+                    {/if}
                 {/if}
             </span>
         </div>
@@ -96,8 +127,9 @@
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
+                class:sv-act-locked={pwEncrypted}
                 on:click={() => copy(data.password || "", "密码已复制")}
-                >🔑 密码</span
+                >{pwEncrypted ? "🔒" : "🔑"} 密码</span
             >
         {/if}
         {#if data.privateKey}
@@ -105,8 +137,9 @@
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
+                class:sv-act-locked={pkEncrypted}
                 on:click={() => copy(data.privateKey || "", "私钥已复制")}
-                >📄 私钥</span
+                >{pkEncrypted ? "🔒" : "📄"} 私钥</span
             >
         {/if}
         {#if data.publicKey}
@@ -114,8 +147,9 @@
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
+                class:sv-act-locked={pubEncrypted}
                 on:click={() => copy(data.publicKey || "", "公钥已复制")}
-                >🔓 公钥</span
+                >{pubEncrypted ? "🔒" : "🔓"} 公钥</span
             >
         {/if}
     </div>
@@ -253,6 +287,20 @@
     }
     .sv-eye:hover {
         background: var(--background-modifier-hover);
+    }
+
+    /* Encryption state */
+    .sv-locked {
+        background: rgba(224, 62, 62, 0.15);
+        color: var(--text-error, #e03e3e);
+    }
+    .sv-locked-text {
+        color: var(--text-faint);
+        font-style: italic;
+        letter-spacing: 0;
+    }
+    .sv-act-locked {
+        opacity: 0.6;
     }
 
     /* Footer */
