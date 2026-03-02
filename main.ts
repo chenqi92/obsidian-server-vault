@@ -58,6 +58,9 @@ export default class ServerVaultPlugin extends Plugin {
                         onEdit: (gIdx: number, sIdx: number) => {
                             this.handleEdit(groups, displayGroups, gIdx, sIdx, formatType, trimmed, ctx.sourcePath);
                         },
+                        onAdd: () => {
+                            this.handleAdd(groups, formatType, trimmed, ctx.sourcePath);
+                        },
                     },
                 });
             } catch (e) {
@@ -147,14 +150,13 @@ export default class ServerVaultPlugin extends Plugin {
         const original = originalGroups[gIdx]?.servers[sIdx];
         if (!display || !original) return;
 
-        new EditServerModal(this.app, display, async (formData) => {
+        const modal = new EditServerModal(this.app, display, async (formData) => {
             const pw = await this.getMasterPassword();
             if (!pw && this.settings.encryptionEnabled) {
                 new Notice('⚠️ 需要设置主密码才能保存');
                 return;
             }
 
-            // 合并更新：非敏感字段直接覆盖，敏感字段处理加密
             const updated = { ...original };
             updated.alias = formData.alias || original.alias;
             updated.env = formData.env || original.env;
@@ -162,20 +164,60 @@ export default class ServerVaultPlugin extends Plugin {
             updated.port = formData.port ?? original.port;
             updated.user = formData.user || original.user;
 
-            // 敏感字段：有新值→加密，无新值→保持原加密值
             for (const field of ['password', 'privateKey', 'publicKey'] as const) {
                 if (formData[field] !== undefined && formData[field] !== '') {
                     updated[field] = pw ? await encryptValue(formData[field]!, pw) : formData[field];
                 }
-                // else: keep original[field] (which is already ENC(...) or undefined)
             }
 
-            // 更新组数据并回写
             originalGroups[gIdx].servers[sIdx] = updated;
             const newSource = this.serializeGroups(originalGroups, formatType);
             await this.writeBlock(sourcePath, rawSource, newSource);
             new Notice('✅ 服务器信息已保存');
         });
+        modal.open();
+    }
+
+    /** 新增服务器 */
+    private handleAdd(
+        originalGroups: ServerGroup[], formatType: FormatType,
+        rawSource: string, sourcePath: string
+    ) {
+        const modal = new EditServerModal(this.app, null, async (formData) => {
+            const pw = await this.getMasterPassword();
+            if (!pw && this.settings.encryptionEnabled) {
+                new Notice('⚠️ 需要设置主密码才能保存');
+                return;
+            }
+
+            const newServer: ServerData = {
+                alias: formData.alias || formData.host || '未命名',
+                env: (formData.env as any) || 'dev',
+                host: formData.host || '未配置',
+                port: formData.port || 22,
+                user: formData.user || 'root',
+            };
+
+            for (const field of ['password', 'privateKey', 'publicKey'] as const) {
+                if (formData[field]) {
+                    (newServer as any)[field] = pw ? await encryptValue(formData[field]!, pw) : formData[field];
+                }
+            }
+
+            // 添加到第一个分组
+            if (originalGroups.length > 0) {
+                originalGroups[0].servers.push(newServer);
+            } else {
+                originalGroups.push({ group: '服务器', servers: [newServer] });
+            }
+
+            // 如果原来是单服务器格式，升级为 flat 数组格式
+            const newFmt = (formatType === 'single' && originalGroups[0]?.servers.length > 1) ? 'flat' : formatType;
+            const newSource = this.serializeGroups(originalGroups, newFmt as FormatType);
+            await this.writeBlock(sourcePath, rawSource, newSource);
+            new Notice('✅ 新服务器已添加');
+        });
+        modal.open();
     }
 
     /** 将新内容写回 .md 文件中的代码块 */

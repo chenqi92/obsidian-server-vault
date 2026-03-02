@@ -6,6 +6,7 @@
     export let groups: ServerGroup[];
     export let onDecrypt: (val: string) => Promise<string | null>;
     export let onEdit: (groupIndex: number, serverIndex: number) => void;
+    export let onAdd: () => void;
 
     let searchQuery = "";
     let collapsedGroups: Record<string, boolean> = {};
@@ -81,6 +82,9 @@
                 >✕</span
             >
         {/if}
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <span class="sv-add-btn" on:click={onAdd} title="新增服务器">＋</span>
     </div>
 
     {#if filteredGroups.length === 0}
@@ -236,5 +240,25 @@
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 8px;
         padding: 6px 0 6px 20px;
+    }
+
+    .sv-add-btn {
+        cursor: pointer;
+        font-size: 1.1em;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-s, 4px);
+        color: var(--text-muted);
+        transition:
+            background 0.15s,
+            color 0.15s;
+        flex-shrink: 0;
+    }
+    .sv-add-btn:hover {
+        background: var(--interactive-accent);
+        color: var(--text-on-accent);
     }
 </style>
