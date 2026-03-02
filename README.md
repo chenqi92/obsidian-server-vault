@@ -1,150 +1,149 @@
 # Server Vault
 
-> 在 Obsidian 中管理服务器资产与凭据，将 `server` 代码块渲染为精美的交互式卡片。
+> Manage server credentials securely. Renders `server` code blocks as interactive cards with search, grouping, and AES-256-GCM encryption.
 
-![Server Vault 效果展示](https://nas.allbs.cn:8888/cloudpic/2026/03/e5bc6735c667afad84b5760064a86303.png)
+![Server Vault Preview](https://nas.allbs.cn:8888/cloudpic/2026/03/e5bc6735c667afad84b5760064a86303.png)
 
-## ✨ 功能特性
+## ✨ Features
 
-- **代码块原位渲染**：在 Markdown 中写入 ` ```server ` 代码块，自动渲染为交互式服务器资产卡片
-- **项目分组 & 折叠**：支持按项目分组管理服务器，点击分组标题可展开/收起
-- **实时搜索**：顶部搜索栏，按别名、IP、用户名、环境实时过滤
-- **一键复制**：SSH 命令、密码、私钥、公钥均可一键复制到剪贴板
-- **密码遮挡**：密码默认隐藏为 `••••••`，点击眼睛图标可临时显示
-- **环境标识**：🔴 生产 / 🟡 测试 / 🟢 开发，一目了然
-- **主题适配**：完全使用 Obsidian CSS 变量，自动适配明暗主题
-- **多格式兼容**：支持单对象、扁平数组、分组数组等多种 YAML 格式
+- **Code Block Rendering** — Write a ` ```server ` code block in Markdown and it renders as interactive server cards
+- **Group & Collapse** — Organize servers into collapsible groups
+- **Real-time Search** — Filter by alias, IP, username, or environment
+- **One-click Copy** — Copy SSH commands, passwords, private/public keys to clipboard
+- **Password Masking** — Passwords are hidden by default; click 👁 to temporarily reveal (auto-hides after 5s)
+- **Edit & Add via Modal** — Use the ✏️ and ＋ buttons to edit/add servers through a form (sensitive data never stored in plaintext)
+- **Environment Badges** — 🔴 Production / 🟡 Testing / 🟢 Development
+- **Theme Support** — Uses Obsidian CSS variables, adapts to light/dark themes
+- **Multiple YAML Formats** — Supports single object, flat array, and grouped array formats
 
-## 📦 安装
+## 📦 Installation
 
-### 手动安装
+### Manual
 
-1. 下载最新 [Release](https://github.com/chenqi92/obsidian-server-vault/releases) 中的 `main.js`、`manifest.json`、`styles.css`
-2. 在 Obsidian Vault 目录下创建 `.obsidian/plugins/server-vault/`
-3. 将上述 3 个文件复制到该目录
-4. 打开 Obsidian → 设置 → 社区插件 → 启用 **Server Vault**
+1. Download `main.js`, `manifest.json`, `styles.css` from the latest [Release](https://github.com/chenqi92/obsidian-server-vault/releases)
+2. Create `.obsidian/plugins/server-vault/` in your vault
+3. Copy the 3 files into that directory
+4. Settings → Community Plugins → Enable **Server Vault**
 
-### 通过 BRAT 安装
+### Via BRAT
 
-1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 插件
-2. 在 BRAT 设置中添加仓库：`chenqi92/obsidian-server-vault`
+1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat)
+2. Add repo: `chenqi92/obsidian-server-vault`
 
-## 📝 使用方法
+## 📝 Usage
 
-### 基础用法（单台服务器）
+### Basic (Single Server)
 
 ````markdown
 ```server
-alias: "阿里云-核心数据库"
+alias: "My Database"
 env: prod
 host: 47.100.20.55
 port: 22
 user: root
-password: "MySuperSecretPassword#2026"
 ```
 ````
 
-### 多台服务器（横向并排）
+### Grouped (Recommended)
 
 ````markdown
 ```server
-- alias: "Web 服务器"
-  env: prod
-  host: 47.100.20.55
-  user: root
-  password: "Password123"
-
-- alias: "数据库服务器"
-  env: prod
-  host: 47.100.20.56
-  user: root
-  password: "DbPass456"
-```
-````
-
-### 项目分组（推荐）
-
-````markdown
-```server
-- group: "阿里云"
+- group: "AWS"
   servers:
-    - alias: "核心数据库"
+    - alias: "Core Database"
       env: prod
       host: 47.100.20.55
       user: root
-      password: "MyPassword#2026"
-    - alias: "缓存集群"
+    - alias: "Cache Cluster"
       env: prod
       host: 47.100.20.56
       user: root
-      password: "CachePass"
 
-- group: "腾讯云"
+- group: "GCP"
   servers:
-    - alias: "前端静态"
+    - alias: "Frontend"
       env: test
       host: 101.35.22.10
       user: ubuntu
-      publicKey: "ssh-rsa AAAAB3Nza..."
 ```
 ````
 
-### 支持的字段
+> **Do NOT write passwords in YAML!** Click ✏️ on the card → enter password in the modal → it gets encrypted before saving to disk.
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `alias` | 否 | 服务器别名，默认使用 host |
-| `env` | 否 | 环境：`prod` / `test` / `dev`，默认 `dev` |
-| `host` | 是 | IP 地址或域名 |
-| `port` | 否 | SSH 端口，默认 `22` |
-| `user` | 否 | 登录用户名，默认 `root` |
-| `password` | 否 | 登录密码 |
-| `privateKey` | 否 | SSH 私钥内容 |
-| `publicKey` | 否 | SSH 公钥内容 |
+### Supported Fields
 
-## 🔐 加密功能
+| Field | Required | Description |
+|-------|----------|-------------|
+| `alias` | No | Display name (defaults to host) |
+| `env` | No | `prod` / `test` / `dev` (default: `dev`) |
+| `host` | Yes | IP address or hostname |
+| `port` | No | SSH port (default: `22`) |
+| `user` | No | Username (default: `root`) |
+| `password` | No | Login password (enter via edit modal) |
+| `privateKey` | No | SSH private key content |
+| `publicKey` | No | SSH public key content |
 
-本插件内置 **AES-256-GCM** 加密，可对密码、私钥等敏感字段进行加密保护。
+## 🔐 Encryption
 
-### 启用加密
+Built-in **AES-256-GCM** encryption with PBKDF2 key derivation (100,000 iterations).
 
-设置 → Server Vault → 开启「启用加密」
+### How it Works
 
-### 命令面板 (Ctrl/Cmd+P)
+1. **Enable encryption** in Settings → Server Vault
+2. **Set master password** via command palette or settings panel
+3. **Edit servers** via the ✏️ button — passwords are encrypted as `ENC(...)` before writing to disk
+4. **Copy/Reveal** — passwords are decrypted on-the-fly when copying or revealing
 
-| 命令 | 说明 |
-|------|------|
-| **Server Vault: 加密当前文件** | 将当前文件中 server 代码块的明文密码/密钥字段加密为 `ENC(...)` 格式 |
-| **Server Vault: 解锁** | 输入主密码以解密查看加密的服务器数据 |
-| **Server Vault: 锁定** | 清除内存中的主密码 |
+> The master password is stored only in memory. It is cleared when you close the app.
 
-> 主密码仅保存在内存中，关闭 Obsidian 后自动清除。加密算法：AES-256-GCM + PBKDF2（100,000 次迭代）。
+### Commands (Ctrl/Cmd+P)
 
-## ⚠️ 安全提示
+| Command | Description |
+|---------|-------------|
+| **Server Vault: Unlock** | Enter master password to decrypt |
+| **Server Vault: Lock** | Clear master password from memory |
 
-> 如不启用加密功能，密码和私钥将以明文形式存储在 Markdown 文件中。请注意以下风险：
->
-> - 如果使用云同步（iCloud、OneDrive、Obsidian Git 等），明文密码将在云端暴露
-> - 恶意或存在漏洞的第三方 Obsidian 插件可能读取 Vault 中的所有文件
-> - 本地恶意软件可能扫描读取明文密码文件
->
-> **强烈建议启用加密功能**以保护敏感凭据。
+## ⚠️ Security Notes
 
-## 🛠️ 开发
+- Sensitive data is **never stored in plaintext** when using the edit modal with encryption enabled
+- The master password only exists in memory — never persisted to disk
+- Uses Web Crypto API (AES-256-GCM + PBKDF2)
+
+## 🛠️ Development
 
 ```bash
-# 安装依赖
 npm install
-
-# 开发模式（watch）
-npm run dev
-
-# 生产构建
-npm run build
+npm run dev    # watch mode
+npm run build  # production
 ```
 
-**技术栈**：TypeScript + Svelte 4 + esbuild
+**Tech Stack**: TypeScript + Svelte 4 + esbuild
 
 ## 📄 License
 
 [MIT](LICENSE)
+
+---
+
+# 中文说明
+
+> 在 Obsidian 中安全管理服务器凭据，将 `server` 代码块渲染为交互式卡片。
+
+## 功能特性
+
+- 代码块原位渲染为服务器卡片
+- 项目分组 & 折叠
+- 实时搜索（别名、IP、用户名、环境）
+- 一键复制 SSH 命令、密码、密钥
+- 通过弹窗表单编辑/新增服务器（敏感数据从不以明文落盘）
+- AES-256-GCM 加密 + PBKDF2 密钥派生
+- 完全适配明暗主题
+
+## 使用方式
+
+1. 在 Markdown 中创建 ` ```server ` 代码块，写入基础信息（host、user 等）
+2. 点击卡片上的 ✏️ 按钮通过弹窗输入密码（密码自动加密后写入文件）
+3. 点击 🔑 可直接解密复制密码到剪贴板
+4. 点击 👁 可临时查看密码（5 秒后自动隐藏）
+
+> ⚠️ 主密码仅保存在内存中，关闭 Obsidian 后自动清除。
