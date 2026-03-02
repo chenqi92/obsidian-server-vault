@@ -3,7 +3,8 @@
     "name": "Server Vault",
     "version": "1.0.0",
     "minAppVersion": "1.0.0",
-    "description": "在 Obsidian 中管理服务器资产与凭据，将 server 代码块渲染为精美的交互式卡片。",
+    "description": "Manage server credentials securely in Obsidian. Renders server code blocks as interactive cards with search, grouping, and AES-256-GCM encryption.",
     "author": "chenqi",
+    "authorUrl": "https://github.com/chenqi92",
     "isDesktopOnly": false
 }
