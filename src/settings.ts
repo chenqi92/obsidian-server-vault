@@ -31,7 +31,30 @@ export class ServerVaultSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.encryptionEnabled = value;
                     await this.plugin.saveSettings();
+                    this.display(); // 刷新界面
                 }));
+
+        if (this.plugin.settings.encryptionEnabled) {
+            const isUnlocked = !!this.plugin.masterPassword;
+
+            new Setting(containerEl)
+                .setName('主密码')
+                .setDesc(isUnlocked
+                    ? '✅ 已解锁 — 当前会话中主密码已缓存'
+                    : '🔒 未设置 — 点击右侧按钮输入主密码')
+                .addButton(btn => {
+                    btn.setButtonText(isUnlocked ? '🔒 锁定' : '🔓 设置主密码');
+                    if (!isUnlocked) btn.setCta();
+                    btn.onClick(async () => {
+                        if (isUnlocked) {
+                            this.plugin.lockVault();
+                        } else {
+                            await this.plugin.unlockVault();
+                        }
+                        this.display();
+                    });
+                });
+        }
 
         containerEl.createEl('h3', { text: '命令说明' });
 
