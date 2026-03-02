@@ -3,50 +3,66 @@
     import type { ServerData } from "../../main";
 
     export let data: ServerData;
+    export let onDecrypt: (val: string) => Promise<string | null>;
+    export let onEdit: () => void;
 
-    let passwordVisible = false;
+    let revealedPw: string | null = null;
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
 
-    /** 检测字段是否处于加密状态（未解密） */
-    function isEnc(val: string | undefined): boolean {
-        return (
-            typeof val === "string" &&
-            val.startsWith("ENC(") &&
-            val.endsWith(")")
-        );
+    function isEnc(v: string | undefined): boolean {
+        return typeof v === "string" && v.startsWith("ENC(") && v.endsWith(")");
     }
 
-    function copy(text: string, msg: string) {
-        if (isEnc(text)) {
-            new Notice(
-                "🔒 数据已加密，请先执行「Server Vault: 解锁」命令",
-                2500,
-            );
-            return;
+    /** 复制字段值（如果加密，先解密再复制到剪贴板，不显示） */
+    async function copyField(val: string | undefined, msg: string) {
+        if (!val) return;
+        let plain = val;
+        if (isEnc(val)) {
+            const d = await onDecrypt(val);
+            if (!d) return;
+            plain = d;
         }
         navigator.clipboard
-            .writeText(text)
+            .writeText(plain)
             .then(() => new Notice(`✅ ${msg}`, 1500))
             .catch(() => new Notice("❌ 复制失败", 2000));
     }
 
-    $: sshCmd = `ssh -p ${data.port || 22} ${data.user}@${data.host}`;
-    $: pwEncrypted = isEnc(data.password);
-    $: pkEncrypted = isEnc(data.privateKey);
-    $: pubEncrypted = isEnc(data.publicKey);
-    $: authLabel = data.privateKey
-        ? "密钥"
-        : data.publicKey
-          ? "公钥"
-          : data.password
-            ? "密码"
-            : "—";
-    $: masked = pwEncrypted
-        ? "🔒 已加密"
-        : passwordVisible
-          ? data.password
-          : "••••••";
+    /** 临时显示密码（5秒后自动隐藏） */
+    async function toggleReveal() {
+        if (revealedPw) {
+            revealedPw = null;
+            if (revealTimer) clearTimeout(revealTimer);
+            return;
+        }
+        let pwd = data.password;
+        if (!pwd) return;
+        if (isEnc(pwd)) {
+            const d = await onDecrypt(pwd);
+            if (!d) return;
+            pwd = d;
+        }
+        revealedPw = pwd;
+        revealTimer = setTimeout(() => {
+            revealedPw = null;
+        }, 5000);
+    }
 
-    function getEnvLabel(env: string): string {
+    $: sshCmd = `ssh -p ${data.port || 22} ${data.user}@${data.host}`;
+    $: hasPw = !!data.password;
+    $: hasPk = !!data.privateKey;
+    $: hasPub = !!data.publicKey;
+    $: pwEnc = isEnc(data.password);
+    $: displayPw = revealedPw
+        ? revealedPw
+        : pwEnc
+          ? "🔒 已加密"
+          : hasPw
+            ? "••••••"
+            : "—";
+    $: authLabel = hasPk ? "密钥" : hasPub ? "公钥" : hasPw ? "密码" : "—";
+
+    function envLabel(env: string): string {
         return (
             (
                 { prod: "生产", test: "测试", dev: "开发" } as Record<
@@ -59,18 +75,24 @@
 </script>
 
 <div class="sv-card">
-    <!-- Header: 紧凑 -->
+    <!-- Header -->
     <div class="sv-hd">
         <span class="sv-dot sv-{data.env}"></span>
         <span class="sv-name">{data.alias}</span>
-        <span class="sv-tag">{getEnvLabel(data.env)}</span>
+        <span class="sv-tag">{envLabel(data.env)}</span>
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <span class="sv-edit-btn" on:click={onEdit} title="编辑">✏️</span>
     </div>
 
-    <!-- Body: 紧凑的 key-value -->
+    <!-- Body -->
     <div class="sv-bd">
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div class="sv-kv" on:click={() => copy(data.host, "IP 已复制")}>
+        <div
+            class="sv-kv sv-clickable"
+            on:click={() => copyField(data.host, "IP 已复制")}
+        >
             <span class="sv-k">IP</span>
             <span class="sv-v sv-cp">{data.host}</span>
         </div>
@@ -80,76 +102,77 @@
         </div>
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div class="sv-kv" on:click={() => copy(data.user, "用户名已复制")}>
+        <div
+            class="sv-kv sv-clickable"
+            on:click={() => copyField(data.user, "用户名已复制")}
+        >
             <span class="sv-k">用户</span>
             <span class="sv-v sv-cp">{data.user}</span>
         </div>
-        <div class="sv-kv">
-            <span class="sv-k">认证</span>
-            <span class="sv-v sv-auth">
-                <span
-                    class="sv-auth-badge"
-                    class:sv-locked={pwEncrypted || pkEncrypted || pubEncrypted}
-                    >{authLabel}</span
-                >
-                {#if data.password}
-                    <code class="sv-pw" class:sv-locked-text={pwEncrypted}
-                        >{masked}</code
+        {#if hasPw || hasPk || hasPub}
+            <div class="sv-kv">
+                <span class="sv-k">认证</span>
+                <span class="sv-v sv-auth">
+                    <span
+                        class="sv-auth-badge"
+                        class:sv-enc={pwEnc ||
+                            isEnc(data.privateKey) ||
+                            isEnc(data.publicKey)}>{authLabel}</span
                     >
-                    {#if !pwEncrypted}
+                    {#if hasPw}
+                        <code
+                            class="sv-pw"
+                            class:sv-enc-text={pwEnc && !revealedPw}
+                            >{displayPw}</code
+                        >
                         <!-- svelte-ignore a11y-click-events-have-key-events -->
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
                         <span
                             class="sv-eye"
-                            on:click|stopPropagation={() =>
-                                (passwordVisible = !passwordVisible)}
+                            on:click|stopPropagation={toggleReveal}
+                            title={revealedPw ? "隐藏" : "查看密码"}
                         >
-                            {passwordVisible ? "🙈" : "👁"}
+                            {revealedPw ? "🙈" : "👁"}
                         </span>
                     {/if}
-                {/if}
-            </span>
-        </div>
+                </span>
+            </div>
+        {/if}
     </div>
 
-    <!-- Footer: 横排按钮 -->
+    <!-- Footer -->
     <div class="sv-ft">
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <span
             class="sv-act sv-primary"
-            on:click={() => copy(sshCmd, "SSH 命令已复制")}
+            on:click={() => copyField(sshCmd, "SSH 命令已复制")}>>_ SSH</span
         >
-            >_ SSH
-        </span>
-        {#if data.password}
+        {#if hasPw}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
-                class:sv-act-locked={pwEncrypted}
-                on:click={() => copy(data.password || "", "密码已复制")}
-                >{pwEncrypted ? "🔒" : "🔑"} 密码</span
+                on:click={() => copyField(data.password, "密码已复制")}
+                >🔑 密码</span
             >
         {/if}
-        {#if data.privateKey}
+        {#if hasPk}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
-                class:sv-act-locked={pkEncrypted}
-                on:click={() => copy(data.privateKey || "", "私钥已复制")}
-                >{pkEncrypted ? "🔒" : "📄"} 私钥</span
+                on:click={() => copyField(data.privateKey, "私钥已复制")}
+                >📄 私钥</span
             >
         {/if}
-        {#if data.publicKey}
+        {#if hasPub}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
-                class:sv-act-locked={pubEncrypted}
-                on:click={() => copy(data.publicKey || "", "公钥已复制")}
-                >{pubEncrypted ? "🔒" : "🔓"} 公钥</span
+                on:click={() => copyField(data.publicKey, "公钥已复制")}
+                >🔓 公钥</span
             >
         {/if}
     </div>
@@ -161,7 +184,7 @@
         border: 1px solid var(--background-modifier-border);
         border-radius: var(--radius-s, 6px);
         overflow: hidden;
-        transition: border-color 0.15s ease;
+        transition: border-color 0.15s;
         display: flex;
         flex-direction: column;
         font-size: 0.84em;
@@ -170,7 +193,6 @@
         border-color: var(--interactive-accent);
     }
 
-    /* Header */
     .sv-hd {
         display: flex;
         align-items: center;
@@ -198,7 +220,6 @@
         background: var(--color-green, #2db44d);
         color: var(--color-green, #2db44d);
     }
-
     .sv-name {
         flex: 1;
         font-weight: 600;
@@ -218,8 +239,20 @@
         font-weight: 600;
         flex-shrink: 0;
     }
+    .sv-edit-btn {
+        cursor: pointer;
+        font-size: 0.85em;
+        padding: 2px 4px;
+        border-radius: 3px;
+        transition: background 0.12s;
+        flex-shrink: 0;
+        opacity: 0.5;
+    }
+    .sv-edit-btn:hover {
+        background: var(--background-modifier-hover);
+        opacity: 1;
+    }
 
-    /* Body */
     .sv-bd {
         padding: 6px 10px;
         display: flex;
@@ -234,12 +267,12 @@
         min-height: 22px;
         padding: 1px 4px;
         border-radius: 3px;
-        transition: background-color 0.12s ease;
+        transition: background 0.12s;
     }
-    .sv-kv:has(.sv-cp) {
+    .sv-clickable {
         cursor: pointer;
     }
-    .sv-kv:has(.sv-cp):hover {
+    .sv-clickable:hover {
         background: var(--background-modifier-hover);
     }
     .sv-k {
@@ -257,7 +290,6 @@
         color: var(--text-accent);
     }
 
-    /* Auth */
     .sv-auth {
         display: flex;
         align-items: center;
@@ -271,6 +303,10 @@
         background: var(--background-modifier-hover);
         color: var(--text-muted);
     }
+    .sv-enc {
+        background: rgba(224, 62, 62, 0.15);
+        color: var(--text-error, #e03e3e);
+    }
     .sv-pw {
         font-size: 0.85em;
         color: var(--text-muted);
@@ -278,39 +314,29 @@
         background: none;
         padding: 0;
     }
+    .sv-enc-text {
+        font-style: italic;
+        letter-spacing: 0;
+        font-size: 0.78em;
+    }
     .sv-eye {
         cursor: pointer;
         font-size: 0.82em;
         padding: 1px 2px;
         border-radius: 3px;
-        transition: background 0.12s ease;
+        transition: background 0.12s;
     }
     .sv-eye:hover {
         background: var(--background-modifier-hover);
     }
 
-    /* Encryption state */
-    .sv-locked {
-        background: rgba(224, 62, 62, 0.15);
-        color: var(--text-error, #e03e3e);
-    }
-    .sv-locked-text {
-        color: var(--text-faint);
-        font-style: italic;
-        letter-spacing: 0;
-    }
-    .sv-act-locked {
-        opacity: 0.6;
-    }
-
-    /* Footer */
     .sv-ft {
         display: flex;
         gap: 4px;
         padding: 6px 10px;
+        flex-wrap: wrap;
         border-top: 1px solid var(--background-modifier-border);
         background: var(--background-secondary-alt);
-        flex-wrap: wrap;
         margin-top: auto;
     }
     .sv-act {
@@ -320,7 +346,7 @@
         font-size: 0.82em;
         font-family: var(--font-interface);
         font-weight: 500;
-        transition: background 0.12s ease;
+        transition: background 0.12s;
         user-select: none;
         white-space: nowrap;
         background: var(--interactive-normal);

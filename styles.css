@@ -1,27 +1,66 @@
 /* ============================================
    Server Vault - Global Styles
-   使用 Obsidian CSS 变量确保主题兼容
    ============================================ */
 
-/* 错误提示样式 */
 .sv-error {
     color: var(--text-error, #e03e3e);
     padding: 12px 16px;
-    background-color: rgba(224, 62, 62, 0.08);
+    background: rgba(224, 62, 62, 0.08);
     border-radius: var(--radius-s, 4px);
     border: 1px solid rgba(224, 62, 62, 0.2);
     font-size: 0.9em;
     margin: 0.5em 0;
 }
 
-/* 错误时回显原始 YAML */
 .sv-error-source {
     font-size: 0.82em;
     color: var(--text-muted);
-    background-color: var(--background-secondary);
+    background: var(--background-secondary);
     padding: 8px 12px;
     border-radius: var(--radius-s, 4px);
     margin: 0.25em 0 0.5em;
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+/* ---- Edit Modal ---- */
+.sv-edit-modal {
+    max-width: 520px;
+}
+
+.sv-edit-modal h2 {
+    margin-bottom: 12px;
+}
+
+.sv-edit-modal h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-size: 0.95em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: 4px;
+}
+
+.sv-textarea {
+    display: block;
+    width: 100%;
+    min-height: 64px;
+    max-height: 120px;
+    padding: 6px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s, 4px);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-family: var(--font-monospace);
+    font-size: 0.85em;
+    resize: vertical;
+}
+
+.sv-modal-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
 }
