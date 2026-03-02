@@ -150,7 +150,8 @@ export default class ServerVaultPlugin extends Plugin {
         const original = originalGroups[gIdx]?.servers[sIdx];
         if (!display || !original) return;
 
-        const modal = new EditServerModal(this.app, display, async (formData) => {
+        const groupNames = originalGroups.map(g => g.group);
+        const modal = new EditServerModal(this.app, display, groupNames, async ({ data: formData }) => {
             const pw = await this.getMasterPassword();
             if (!pw && this.settings.encryptionEnabled) {
                 new Notice('⚠️ 需要设置主密码才能保存');
@@ -183,7 +184,8 @@ export default class ServerVaultPlugin extends Plugin {
         originalGroups: ServerGroup[], formatType: FormatType,
         rawSource: string, sourcePath: string
     ) {
-        const modal = new EditServerModal(this.app, null, async (formData) => {
+        const groupNames = originalGroups.map(g => g.group);
+        const modal = new EditServerModal(this.app, null, groupNames, async ({ data: formData, targetGroup }) => {
             const pw = await this.getMasterPassword();
             if (!pw && this.settings.encryptionEnabled) {
                 new Notice('⚠️ 需要设置主密码才能保存');
@@ -204,16 +206,20 @@ export default class ServerVaultPlugin extends Plugin {
                 }
             }
 
-            // 添加到第一个分组
-            if (originalGroups.length > 0) {
-                originalGroups[0].servers.push(newServer);
-            } else {
-                originalGroups.push({ group: '服务器', servers: [newServer] });
+            // 找到或创建目标分组
+            const groupName = targetGroup || groupNames[0] || '服务器';
+            let group = originalGroups.find(g => g.group === groupName);
+            if (!group) {
+                group = { group: groupName, servers: [] };
+                originalGroups.push(group);
             }
+            group.servers.push(newServer);
 
-            // 如果原来是单服务器格式，升级为 flat 数组格式
-            const newFmt = (formatType === 'single' && originalGroups[0]?.servers.length > 1) ? 'flat' : formatType;
-            const newSource = this.serializeGroups(originalGroups, newFmt as FormatType);
+            // 有多个分组时自动升格为 grouped 格式
+            const newFmt: FormatType = originalGroups.length > 1 ? 'grouped'
+                : (formatType === 'single' && group.servers.length > 1) ? 'flat'
+                    : formatType;
+            const newSource = this.serializeGroups(originalGroups, newFmt);
             await this.writeBlock(sourcePath, rawSource, newSource);
             new Notice('✅ 新服务器已添加');
         });

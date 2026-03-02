@@ -1,23 +1,41 @@
 import { App, Modal, Setting, Notice } from 'obsidian';
 import type { ServerData } from '../main';
 
+/** onSave 回调中额外携带分组信息 */
+export interface EditServerResult {
+    data: Partial<ServerData>;
+    /** 仅新增时有效：目标分组名 */
+    targetGroup?: string;
+}
+
 /**
  * 服务器编辑弹窗
- * 密码/私钥/公钥字段使用 password input，保证敏感数据不以明文出现在屏幕上。
- * 留空表示保持原有值不变。
+ * - 新增时显示分组选择（可选已有分组或新建分组）
+ * - 密码/私钥/公钥字段使用 password input
+ * - 留空表示保持原有值不变
  */
 export class EditServerModal extends Modal {
     private formData: Partial<ServerData>;
     private original: ServerData | null;
-    private onSave: (data: Partial<ServerData>) => void;
+    private onSave: (result: EditServerResult) => void;
+    private existingGroups: string[];
+    private selectedGroup: string = '';
+    private newGroupName: string = '';
 
-    constructor(app: App, original: ServerData | null, onSave: (data: Partial<ServerData>) => void) {
+    constructor(
+        app: App,
+        original: ServerData | null,
+        existingGroups: string[],
+        onSave: (result: EditServerResult) => void
+    ) {
         super(app);
         this.original = original;
+        this.existingGroups = existingGroups;
         this.onSave = onSave;
         this.formData = original
             ? { alias: original.alias, env: original.env, host: original.host, port: original.port, user: original.user }
             : { env: 'dev' as const, port: 22, user: 'root' };
+        this.selectedGroup = existingGroups[0] || '';
     }
 
     onOpen() {
@@ -25,6 +43,34 @@ export class EditServerModal extends Modal {
         contentEl.empty();
         contentEl.addClass('sv-edit-modal');
         contentEl.createEl('h2', { text: this.original ? '✏️ 编辑服务器' : '➕ 添加服务器' });
+
+        // ---- 分组选择（仅新增时显示）----
+        if (!this.original) {
+            const groupSetting = new Setting(contentEl)
+                .setName('所属分组')
+                .setDesc('选择已有分组或输入新分组名');
+
+            if (this.existingGroups.length > 0) {
+                groupSetting.addDropdown(dd => {
+                    for (const g of this.existingGroups) dd.addOption(g, g);
+                    dd.addOption('__new__', '＋ 新建分组...');
+                    dd.setValue(this.selectedGroup);
+                    dd.onChange(v => {
+                        this.selectedGroup = v;
+                        // 显示/隐藏新分组输入框
+                        newGroupRow.style.display = v === '__new__' ? 'flex' : 'none';
+                    });
+                });
+            } else {
+                this.selectedGroup = '__new__';
+            }
+
+            const newGroupRow = contentEl.createDiv({ cls: 'sv-new-group-row' });
+            newGroupRow.style.display = this.selectedGroup === '__new__' || this.existingGroups.length === 0 ? 'flex' : 'none';
+            const newGroupInput = newGroupRow.createEl('input', { type: 'text', placeholder: '输入新分组名，例：华为云' });
+            newGroupInput.style.cssText = 'flex:1;padding:6px 8px;border:1px solid var(--background-modifier-border);border-radius:var(--radius-s,4px);background:var(--background-primary);color:var(--text-normal);font-size:0.9em;margin:0 0 8px 0;';
+            newGroupInput.addEventListener('input', () => this.newGroupName = newGroupInput.value);
+        }
 
         // ---- 基础信息 ----
         new Setting(contentEl).setName('别名').addText(t =>
@@ -91,7 +137,22 @@ export class EditServerModal extends Modal {
                 new Notice('⚠️ 主机地址不能为空');
                 return;
             }
-            this.onSave(this.formData);
+
+            // 确定目标分组
+            let targetGroup: string | undefined;
+            if (!this.original) {
+                if (this.selectedGroup === '__new__' || this.existingGroups.length === 0) {
+                    if (!this.newGroupName.trim()) {
+                        new Notice('⚠️ 请输入分组名称');
+                        return;
+                    }
+                    targetGroup = this.newGroupName.trim();
+                } else {
+                    targetGroup = this.selectedGroup;
+                }
+            }
+
+            this.onSave({ data: this.formData, targetGroup });
             this.close();
         });
     }
