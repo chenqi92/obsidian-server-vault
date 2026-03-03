@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Notice } from "obsidian";
+    import { Notice, setIcon } from "obsidian";
     import type { ServerData, ServerGroup } from "../../main";
     import ServerCard from "./ServerCard.svelte";
 
@@ -7,6 +7,7 @@
     export let onDecrypt: (val: string) => Promise<string | null>;
     export let onEdit: (groupIndex: number, serverIndex: number) => void;
     export let onAdd: () => void;
+    export let onDelete: (groupIndex: number, serverIndex: number) => void;
 
     let searchQuery = "";
     let collapsedGroups: Record<string, boolean> = {};
@@ -53,21 +54,22 @@
         }
         return { gIdx: 0, sIdx: 0 };
     }
+
+    function icon(node: HTMLElement, name: string) {
+        setIcon(node, name);
+        return {
+            update(newName: string) {
+                node.empty();
+                setIcon(node, newName);
+            },
+        };
+    }
 </script>
 
 <div class="sv-vault">
     <!-- 搜索栏 -->
     <div class="sv-search-bar">
-        <svg
-            class="sv-search-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-        >
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
+        <span class="sv-search-icon" use:icon={"search"}></span>
         <input
             class="sv-search-input"
             type="text"
@@ -84,7 +86,9 @@
         {/if}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="sv-add-btn" on:click={onAdd} title="新增服务器">＋</span>
+        <span class="sv-add-btn" on:click={onAdd} title="新增服务器">
+            <span use:icon={"plus"}></span>
+        </span>
     </div>
 
     {#if filteredGroups.length === 0}
@@ -124,6 +128,7 @@
                             data={server}
                             {onDecrypt}
                             onEdit={() => onEdit(idx.gIdx, idx.sIdx)}
+                            onDelete={() => onDelete(idx.gIdx, idx.sIdx)}
                         />
                     {/each}
                 </div>
@@ -151,10 +156,14 @@
         border-color: var(--interactive-accent);
     }
     .sv-search-icon {
-        width: 16px;
-        height: 16px;
+        display: flex;
+        align-items: center;
         flex-shrink: 0;
         opacity: 0.5;
+    }
+    .sv-search-icon :global(svg) {
+        width: 16px;
+        height: 16px;
     }
     .sv-search-input {
         flex: 1;
@@ -260,5 +269,9 @@
     .sv-add-btn:hover {
         background: var(--interactive-accent);
         color: var(--text-on-accent);
+    }
+    .sv-add-btn :global(svg) {
+        width: 18px;
+        height: 18px;
     }
 </style>

@@ -1,10 +1,27 @@
 <script lang="ts">
-    import { Notice } from "obsidian";
+    import { Notice, setIcon } from "obsidian";
     import type { ServerData } from "../../main";
 
     export let data: ServerData;
     export let onDecrypt: (val: string) => Promise<string | null>;
     export let onEdit: () => void;
+    export let onDelete: () => void;
+
+    let deleteConfirm = false;
+    let deleteTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function handleDelete() {
+        if (!deleteConfirm) {
+            deleteConfirm = true;
+            deleteTimer = setTimeout(() => {
+                deleteConfirm = false;
+            }, 2000);
+            return;
+        }
+        if (deleteTimer) clearTimeout(deleteTimer);
+        deleteConfirm = false;
+        onDelete();
+    }
 
     let revealedPw: string | null = null;
     let revealTimer: ReturnType<typeof setTimeout> | null = null;
@@ -13,7 +30,6 @@
         return typeof v === "string" && v.startsWith("ENC(") && v.endsWith(")");
     }
 
-    /** 复制字段值（如果加密，先解密再复制到剪贴板，不显示） */
     async function copyField(val: string | undefined, msg: string) {
         if (!val) return;
         let plain = val;
@@ -28,7 +44,6 @@
             .catch(() => new Notice("❌ 复制失败", 2000));
     }
 
-    /** 临时显示密码（5秒后自动隐藏） */
     async function toggleReveal() {
         if (revealedPw) {
             revealedPw = null;
@@ -48,6 +63,17 @@
         }, 5000);
     }
 
+    /** Svelte action: 使用 Obsidian setIcon 渲染 Lucide 图标 */
+    function icon(node: HTMLElement, name: string) {
+        setIcon(node, name);
+        return {
+            update(newName: string) {
+                node.empty();
+                setIcon(node, newName);
+            },
+        };
+    }
+
     $: sshCmd = `ssh -p ${data.port || 22} ${data.user}@${data.host}`;
     $: hasPw = !!data.password;
     $: hasPk = !!data.privateKey;
@@ -56,7 +82,7 @@
     $: displayPw = revealedPw
         ? revealedPw
         : pwEnc
-          ? "🔒 已加密"
+          ? "已加密"
           : hasPw
             ? "••••••"
             : "—";
@@ -82,7 +108,9 @@
         <span class="sv-tag">{envLabel(data.env)}</span>
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="sv-edit-btn" on:click={onEdit} title="编辑">✏️</span>
+        <span class="sv-icon-btn" on:click={onEdit} title="编辑">
+            <span use:icon={"pencil"}></span>
+        </span>
     </div>
 
     <!-- Body -->
@@ -117,8 +145,17 @@
                         class="sv-auth-badge"
                         class:sv-enc={pwEnc ||
                             isEnc(data.privateKey) ||
-                            isEnc(data.publicKey)}>{authLabel}</span
+                            isEnc(data.publicKey)}
                     >
+                        {#if pwEnc || isEnc(data.privateKey) || isEnc(data.publicKey)}
+                            <span class="sv-icon-inline" use:icon={"lock"}
+                            ></span>
+                        {:else}
+                            <span class="sv-icon-inline" use:icon={"unlock"}
+                            ></span>
+                        {/if}
+                        {authLabel}
+                    </span>
                     {#if hasPw}
                         <code
                             class="sv-pw"
@@ -132,7 +169,8 @@
                             on:click|stopPropagation={toggleReveal}
                             title={revealedPw ? "隐藏" : "查看密码"}
                         >
-                            {revealedPw ? "🙈" : "👁"}
+                            <span use:icon={revealedPw ? "eye-off" : "eye"}
+                            ></span>
                         </span>
                     {/if}
                 </span>
@@ -146,16 +184,19 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <span
             class="sv-act sv-primary"
-            on:click={() => copyField(sshCmd, "SSH 命令已复制")}>>_ SSH</span
+            on:click={() => copyField(sshCmd, "SSH 命令已复制")}
         >
+            <span class="sv-icon-inline" use:icon={"terminal"}></span> SSH
+        </span>
         {#if hasPw}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <span
                 class="sv-act"
                 on:click={() => copyField(data.password, "密码已复制")}
-                >🔑 密码</span
             >
+                <span class="sv-icon-inline" use:icon={"key"}></span> 密码
+            </span>
         {/if}
         {#if hasPk}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -163,8 +204,9 @@
             <span
                 class="sv-act"
                 on:click={() => copyField(data.privateKey, "私钥已复制")}
-                >📄 私钥</span
             >
+                <span class="sv-icon-inline" use:icon={"file-key"}></span> 私钥
+            </span>
         {/if}
         {#if hasPub}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -172,9 +214,24 @@
             <span
                 class="sv-act"
                 on:click={() => copyField(data.publicKey, "公钥已复制")}
-                >🔓 公钥</span
             >
+                <span class="sv-icon-inline" use:icon={"shield"}></span> 公钥
+            </span>
         {/if}
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <span
+            class="sv-act sv-del"
+            class:sv-del-confirm={deleteConfirm}
+            on:click|stopPropagation={handleDelete}
+            title="删除"
+        >
+            {#if deleteConfirm}
+                确认?
+            {:else}
+                <span use:icon={"trash-2"}></span>
+            {/if}
+        </span>
     </div>
 </div>
 
@@ -183,161 +240,170 @@
         background: var(--background-secondary);
         border: 1px solid var(--background-modifier-border);
         border-radius: var(--radius-s, 6px);
-        overflow: hidden;
-        transition: border-color 0.15s;
+        padding: 12px 14px;
+        min-width: 260px;
+        max-width: 340px;
+        flex: 1 1 280px;
         display: flex;
         flex-direction: column;
-        font-size: 0.84em;
+        gap: 8px;
+        transition: box-shadow 0.15s;
     }
     .sv-card:hover {
-        border-color: var(--interactive-accent);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
-
+    /* Header */
     .sv-hd {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 8px 10px;
-        background: var(--background-secondary-alt);
-        border-bottom: 1px solid var(--background-modifier-border);
     }
     .sv-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
         flex-shrink: 0;
-        box-shadow: 0 0 5px currentColor;
     }
     .sv-prod {
-        background: var(--color-red, #e03e3e);
-        color: var(--color-red, #e03e3e);
+        background: #e53935;
     }
     .sv-test {
-        background: var(--color-yellow, #e0a225);
-        color: var(--color-yellow, #e0a225);
+        background: #fbc02d;
     }
     .sv-dev {
-        background: var(--color-green, #2db44d);
-        color: var(--color-green, #2db44d);
+        background: #43a047;
     }
     .sv-name {
-        flex: 1;
         font-weight: 600;
-        color: var(--text-normal);
-        white-space: nowrap;
+        flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-normal);
     }
     .sv-tag {
         font-size: 0.72em;
-        padding: 1px 5px;
+        padding: 1px 6px;
         border-radius: 3px;
-        background: var(--background-modifier-hover);
+        background: var(--background-modifier-border);
         color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        font-weight: 600;
-        flex-shrink: 0;
     }
-    .sv-edit-btn {
+    .sv-icon-btn {
         cursor: pointer;
-        font-size: 0.85em;
-        padding: 2px 4px;
-        border-radius: 3px;
-        transition: background 0.12s;
-        flex-shrink: 0;
         opacity: 0.5;
+        transition: opacity 0.12s;
+        display: inline-flex;
+        align-items: center;
     }
-    .sv-edit-btn:hover {
-        background: var(--background-modifier-hover);
+    .sv-icon-btn:hover {
         opacity: 1;
     }
-
+    /* Lucide inline icon sizing */
+    .sv-icon-btn :global(svg),
+    .sv-icon-inline :global(svg) {
+        width: 14px;
+        height: 14px;
+        stroke-width: 2;
+    }
+    .sv-icon-inline {
+        display: inline-flex;
+        align-items: center;
+        vertical-align: middle;
+    }
+    .sv-eye {
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.15s;
+        display: inline-flex;
+        align-items: center;
+        margin-left: 4px;
+    }
+    .sv-eye :global(svg) {
+        width: 14px;
+        height: 14px;
+    }
+    .sv-eye:hover {
+        opacity: 1;
+    }
+    /* Body */
     .sv-bd {
-        padding: 6px 10px;
         display: flex;
         flex-direction: column;
-        gap: 3px;
-        flex: 1;
+        gap: 4px;
+        font-size: 0.88em;
     }
     .sv-kv {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        min-height: 22px;
-        padding: 1px 4px;
+        gap: 6px;
+        padding: 2px 4px;
         border-radius: 3px;
-        transition: background 0.12s;
     }
     .sv-clickable {
         cursor: pointer;
+        transition: background 0.1s;
     }
     .sv-clickable:hover {
         background: var(--background-modifier-hover);
     }
     .sv-k {
-        color: var(--text-muted);
-        font-size: 0.88em;
+        color: var(--text-faint);
+        min-width: 34px;
+        font-size: 0.9em;
         flex-shrink: 0;
     }
     .sv-v {
-        font-family: var(--font-monospace);
         color: var(--text-normal);
-        font-size: 0.92em;
-        text-align: right;
+        font-family: var(--font-monospace);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .sv-cp {
-        color: var(--text-accent);
+    .sv-cp::after {
+        content: "";
+        display: inline-block;
+        width: 0;
     }
-
     .sv-auth {
         display: flex;
         align-items: center;
         gap: 4px;
+        flex-wrap: wrap;
     }
     .sv-auth-badge {
-        font-family: var(--font-interface);
         font-size: 0.82em;
-        padding: 0 4px;
+        padding: 1px 6px;
         border-radius: 3px;
-        background: var(--background-modifier-hover);
+        background: var(--background-modifier-border);
         color: var(--text-muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+    }
+    .sv-auth-badge :global(svg) {
+        width: 11px;
+        height: 11px;
     }
     .sv-enc {
-        background: rgba(224, 62, 62, 0.15);
-        color: var(--text-error, #e03e3e);
+        background: var(--interactive-accent);
+        color: var(--text-on-accent);
     }
     .sv-pw {
-        font-size: 0.85em;
+        font-family: var(--font-monospace);
+        font-size: 0.9em;
+        letter-spacing: 0.05em;
         color: var(--text-muted);
-        letter-spacing: 0.5px;
-        background: none;
-        padding: 0;
     }
     .sv-enc-text {
-        font-style: italic;
-        letter-spacing: 0;
-        font-size: 0.78em;
+        color: var(--text-accent);
     }
-    .sv-eye {
-        cursor: pointer;
-        font-size: 0.82em;
-        padding: 1px 2px;
-        border-radius: 3px;
-        transition: background 0.12s;
-    }
-    .sv-eye:hover {
-        background: var(--background-modifier-hover);
-    }
-
+    /* Footer */
     .sv-ft {
         display: flex;
-        gap: 4px;
-        padding: 6px 10px;
         flex-wrap: wrap;
+        gap: 4px;
         border-top: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary-alt);
-        margin-top: auto;
+        padding-top: 8px;
     }
     .sv-act {
         cursor: pointer;
@@ -351,6 +417,13 @@
         white-space: nowrap;
         background: var(--interactive-normal);
         color: var(--text-normal);
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+    }
+    .sv-act :global(svg) {
+        width: 12px;
+        height: 12px;
     }
     .sv-act:hover {
         background: var(--interactive-hover);
@@ -361,5 +434,34 @@
     }
     .sv-act.sv-primary:hover {
         background: var(--interactive-accent-hover);
+    }
+    .sv-del {
+        margin-left: auto;
+        opacity: 0.5;
+        transition:
+            opacity 0.15s,
+            background 0.15s,
+            color 0.15s;
+    }
+    .sv-del:hover {
+        opacity: 1;
+    }
+    .sv-del-confirm {
+        opacity: 1;
+        background: #e53935 !important;
+        color: #fff !important;
+        animation: sv-shake 0.3s;
+    }
+    @keyframes sv-shake {
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+        25% {
+            transform: translateX(-3px);
+        }
+        75% {
+            transform: translateX(3px);
+        }
     }
 </style>

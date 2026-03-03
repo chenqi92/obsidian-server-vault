@@ -61,6 +61,9 @@ export default class ServerVaultPlugin extends Plugin {
                         onAdd: () => {
                             this.handleAdd(groups, formatType, trimmed, ctx.sourcePath);
                         },
+                        onDelete: (gIdx: number, sIdx: number) => {
+                            this.handleDelete(groups, gIdx, sIdx, formatType, trimmed, ctx.sourcePath);
+                        },
                     },
                 });
             } catch (e) {
@@ -226,7 +229,37 @@ export default class ServerVaultPlugin extends Plugin {
         modal.open();
     }
 
-    /** 将新内容写回 .md 文件中的代码块 */
+    /** 删除服务器 */
+    private async handleDelete(
+        originalGroups: ServerGroup[], gIdx: number, sIdx: number,
+        formatType: FormatType, rawSource: string, sourcePath: string
+    ) {
+        const server = originalGroups[gIdx]?.servers[sIdx];
+        if (!server) return;
+
+        // 从分组中移除
+        originalGroups[gIdx].servers.splice(sIdx, 1);
+
+        // 如果分组为空，也移除分组
+        if (originalGroups[gIdx].servers.length === 0) {
+            originalGroups.splice(gIdx, 1);
+        }
+
+        // 降格格式
+        let newFmt: FormatType = formatType;
+        const totalServers = originalGroups.reduce((sum, g) => sum + g.servers.length, 0);
+        if (totalServers <= 1 && formatType === 'flat') newFmt = 'single';
+        if (originalGroups.length <= 1 && formatType === 'grouped') newFmt = 'flat';
+
+        if (totalServers === 0) {
+            await this.writeBlock(sourcePath, rawSource, '# 暂无服务器');
+        } else {
+            const newSource = this.serializeGroups(originalGroups, newFmt);
+            await this.writeBlock(sourcePath, rawSource, newSource);
+        }
+        new Notice(`🗑️ 已删除服务器 ${server.alias || server.host}`);
+    }
+
     private async writeBlock(sourcePath: string, oldSource: string, newSource: string) {
         const file = this.app.vault.getAbstractFileByPath(sourcePath);
         if (!(file instanceof TFile)) return;
